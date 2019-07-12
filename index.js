@@ -12,7 +12,13 @@ const createProvider = async (name) => {
   return provider
 }
 
+let categories = {}
 const createCategory = async (title) => {
+
+  if (categories[title]){
+    return categories[title]
+  }
+  console.log('creating new category', title)
   const res = await axios.post(routes.createCategory, {
     title,
     description: title,
@@ -20,9 +26,9 @@ const createCategory = async (title) => {
   }).catch((e) => console.error(`Error posting to ${routes.createCategory}`, e.response.data))
   try{
     const { data: { data: category } } = res
+    categories[title] = category
     return category
-  }
-  catch(e){
+  } catch(e) {
     console.log(res)
   }
 }
@@ -32,7 +38,8 @@ const createItem = async (row, categoryId) => {
     ...row,
     unit_price: parseFloat(row.unit_price),
     category_id: categoryId,
-  }).catch((e) => console.error(`Error posting to ${routes.createItem}`, e.response.data.message))
+    room_type: row.room_type.replace(' ', ''),
+  })
   try{
     const { data: { data: item } } = res
     return item
@@ -41,13 +48,17 @@ const createItem = async (row, categoryId) => {
   }
 }
 
-const addItemToProvider = async (options, pId, item_id) => {
+const addItemToProvider = async (options, pId, item) => {
   const res = await axios.post(routes.addItemToProvider(pId), {
     ...options,
-    item_id
-  }).catch((e) => console.error(`Error posting to ${routes.addItemToProvider(pId)}`, e.response.data.message))
+    item_id: item.id,
+  }).catch((e) => {
+    console.log(`${item.id} already added`, e.response.message)
+  })
 }
 
+
+let createdCount = 0
 const processRow = async (row, provider_id) => {
   // don't process rows that aren't items
   // ie that don't have an ID
@@ -59,21 +70,27 @@ const processRow = async (row, provider_id) => {
   ){
     return
   }
-  const { id: categoryId } = await createCategory(row.category)
-  const item = await createItem(row, categoryId)
-  const { unit_price } = row
-  await addItemToProvider({
-    unit_price: parseFloat(unit_price),
-    provider_id,
-    item_id: item.id,
-    price: parseFloat(unit_price)/2,
-  }, provider_id, item.id)
-  console.log(`${item.id} created: ${item.description.slice(20)}`)
+  try{
+    const { category } = row
+    const { id: categoryId } = categories[category] ? categories[category] : await createCategory(category)
+    const item = await createItem(row, categoryId)
+    const { unit_price } = row
+    await addItemToProvider({
+      unit_price: parseFloat(unit_price),
+      provider_id,
+      item_id: item.id,
+      price: parseFloat(unit_price)/2,
+    }, provider_id, item)
+    createdCount++;
+    // console.log(`${item.id} created: ${item.description.slice(20)}`)
+  } catch(e) {
+    console.log('error posting ', e, row)
+  }
 }
 
 const main = async () => {
   const { id: providerId } = await createProvider('Smurf')
-  csv((r) => processRow(r, providerId))
+  csv((r) => processRow(r, providerId), () => console.log("created :", createdCount))
 }
 
 main()
