@@ -23,6 +23,7 @@ const createCategory = async (title) => {
     title,
     description: title,
     slug: slugify(title),
+    set: 'original-excel',
   }).catch((e) => console.error(`Error posting to ${routes.createCategory}`, e.response.data))
   try{
     const { data: { data: category } } = res
